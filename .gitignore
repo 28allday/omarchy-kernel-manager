@@ -1,0 +1,12 @@
+# Editor / OS
+*.swp
+.DS_Store
+.idea/
+.vscode/
+
+# Local script backups
+*.bak
+*.bak.*
+
+# Local debug logs (used during development)
+/tmp/okm-widths.log
