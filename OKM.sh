@@ -198,15 +198,25 @@ detect_system_theme() {
 }
 
 detect_bindings_config() {
-  # Omarchy always ships ~/.config/hypr/bindings.conf
-  local primary="$HOME/.config/hypr/bindings.conf"
-  if [[ -f "$primary" ]]; then
-    BINDINGS_CONFIG="$primary"
+  # Omarchy 4 (Quattro) moved Hyprland's user config from the old INI-style
+  # bindings.conf to a Lua DSL, bindings.lua (o.bind(...) instead of
+  # bindd/bind lines). Check for the Lua file first since it's what current
+  # Omarchy ships; fall back to bindings.conf for Omarchy 3 systems that
+  # haven't updated.
+  local lua_config="$HOME/.config/hypr/bindings.lua"
+  local conf_config="$HOME/.config/hypr/bindings.conf"
+
+  if [[ -f "$lua_config" ]]; then
+    BINDINGS_CONFIG="$lua_config"
+    return 0
+  fi
+  if [[ -f "$conf_config" ]]; then
+    BINDINGS_CONFIG="$conf_config"
     return 0
   fi
 
-  err "Expected Hyprland config at $primary but it was not found."
-  die "Is this an Omarchy system? Could not find ~/.config/hypr/bindings.conf"
+  err "Expected Hyprland config at $lua_config or $conf_config but neither was found."
+  die "Is this an Omarchy system? Could not find bindings.lua or bindings.conf"
 }
 
 # =============================================================================
@@ -1077,13 +1087,26 @@ cleanup_old_installation() {
   local new_installed_path="/usr/local/bin/okm"
   local old_desktop_file="$HOME/.local/share/applications/omarchy-kernel-manager.desktop"
   local new_desktop_file="$HOME/.local/share/applications/okm.desktop"
-  local bindings_conf="${BINDINGS_CONFIG:-$HOME/.config/hypr/bindings.conf}"
+  # BINDINGS_CONFIG is normally already set by detect_bindings_config(), but
+  # fall back to a fresh lua-first/conf-second probe if this is ever called
+  # standalone (e.g. before detection has run).
+  local bindings_conf="$BINDINGS_CONFIG"
+  if [[ -z "$bindings_conf" ]]; then
+    if [[ -f "$HOME/.config/hypr/bindings.lua" ]]; then
+      bindings_conf="$HOME/.config/hypr/bindings.lua"
+    else
+      bindings_conf="$HOME/.config/hypr/bindings.conf"
+    fi
+  fi
+  # hyprland.conf was renamed to hyprland.lua on Omarchy 4 (Quattro); mirror
+  # whichever format bindings_conf resolved to.
   local hyprland_conf="$HOME/.config/hypr/hyprland.conf"
+  [[ "$bindings_conf" == *.lua ]] && hyprland_conf="$HOME/.config/hypr/hyprland.lua"
 
   info "Cleaning up any previous installation..."
 
-  # Strip any previous OKM block from bindings.conf and (defensively) from
-  # hyprland.conf in case an earlier install version wrote there.
+  # Strip any previous OKM block from bindings.conf/.lua and (defensively)
+  # from hyprland.conf/.lua in case an earlier install version wrote there.
   cleanup_hypr_rules "$bindings_conf"
   if [[ "$hyprland_conf" != "$bindings_conf" ]] && grep -q "OKM\|Omarchy Kernel Manager" "$hyprland_conf" 2>/dev/null; then
     cleanup_hypr_rules "$hyprland_conf"
@@ -1121,34 +1144,48 @@ configure_okm_binding() {
   local hypr_config="${BINDINGS_CONFIG:-$HOME/.config/hypr/bindings.conf}"
   [[ -f "$hypr_config" ]] || { err "Hyprland bindings config not found at $hypr_config"; return 1; }
 
-  # Avoid duplicate injection
-  if grep -q "# OKM bindings - added by OKM installer" "$hypr_config" 2>/dev/null; then
+  # Avoid duplicate injection (check both the old .conf marker and the
+  # Lua-comment marker, since either could already be present)
+  if grep -q "# OKM bindings - added by OKM installer" "$hypr_config" 2>/dev/null \
+    || grep -q -- "-- OKM bindings - added by OKM installer" "$hypr_config" 2>/dev/null; then
     info "OKM keybinding already present in $hypr_config"
     return 0
-  fi
-
-  # Detect bind style (Omarchy ships bindd for descriptive binds)
-  local bind_style="bindd"
-  if ! grep -q "^bindd[[:space:]]*=" "$hypr_config" 2>/dev/null; then
-    if grep -q "^bind[[:space:]]*=" "$hypr_config" 2>/dev/null; then
-      bind_style="bind"
-    fi
   fi
 
   local launch_cmd="xdg-terminal-exec --app-id=TUI.float -e /usr/local/bin/okm"
 
   info "Adding OKM keybinding to $hypr_config (Super+Shift+K)"
-  {
-    echo ""
-    echo "# OKM bindings - added by OKM installer"
-    echo "# (TUI.float app-id triggers Omarchy's stock floating-window rule.)"
-    if [[ "$bind_style" == "bindd" ]]; then
-      echo "bindd = SUPER SHIFT, K, OKM, exec, $launch_cmd"
-    else
-      echo "bind = SUPER SHIFT, K, exec, $launch_cmd"
+
+  if [[ "$hypr_config" == *.lua ]]; then
+    # Omarchy 4 (Quattro): Lua DSL - o.bind(keys, description, command)
+    {
+      echo ""
+      echo "-- OKM bindings - added by OKM installer"
+      echo "-- (TUI.float app-id triggers Omarchy's stock floating-window rule.)"
+      echo "o.bind(\"SUPER + SHIFT + K\", \"OKM\", \"$launch_cmd\")"
+      echo "-- End OKM bindings"
+    } >> "$hypr_config" || { err "Failed to append OKM bindings to $hypr_config"; return 1; }
+  else
+    # Omarchy 3: classic INI-style bindd/bind (Omarchy ships bindd for
+    # descriptive binds)
+    local bind_style="bindd"
+    if ! grep -q "^bindd[[:space:]]*=" "$hypr_config" 2>/dev/null; then
+      if grep -q "^bind[[:space:]]*=" "$hypr_config" 2>/dev/null; then
+        bind_style="bind"
+      fi
     fi
-    echo "# End OKM bindings"
-  } >> "$hypr_config" || { err "Failed to append OKM bindings to $hypr_config"; return 1; }
+    {
+      echo ""
+      echo "# OKM bindings - added by OKM installer"
+      echo "# (TUI.float app-id triggers Omarchy's stock floating-window rule.)"
+      if [[ "$bind_style" == "bindd" ]]; then
+        echo "bindd = SUPER SHIFT, K, OKM, exec, $launch_cmd"
+      else
+        echo "bind = SUPER SHIFT, K, exec, $launch_cmd"
+      fi
+      echo "# End OKM bindings"
+    } >> "$hypr_config" || { err "Failed to append OKM bindings to $hypr_config"; return 1; }
+  fi
 
   hyprctl reload >/dev/null 2>&1 || info "Hyprland reload may have failed; relog if binds inactive."
 }
@@ -1199,8 +1236,14 @@ cleanup_hypr_rules() {
     return 1
   }
 
-  # Remove OKM binding block if present (Super+Shift+K)
+  # Remove OKM binding block if present (Super+Shift+K) - both the
+  # Omarchy 3 (.conf) comment style and the Omarchy 4/Quattro (.lua) style
   sed -i '/# OKM bindings - added by OKM installer/,/# End OKM bindings/d' "$hypr_config" || {
+    err "Error modifying $hypr_config - restoring backup"
+    mv "$backup_file" "$hypr_config"
+    return 1
+  }
+  sed -i '/-- OKM bindings - added by OKM installer/,/-- End OKM bindings/d' "$hypr_config" || {
     err "Error modifying $hypr_config - restoring backup"
     mv "$backup_file" "$hypr_config"
     return 1
