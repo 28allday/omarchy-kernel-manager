@@ -68,7 +68,8 @@ the one you're currently booted into.
 
 ```bash
 # Clone, then run (the script self-installs to /usr/local/bin/okm
-# and adds a Super+Shift+K binding to ~/.config/hypr/bindings.conf).
+# and adds a Super+Shift+K binding to ~/.config/hypr/bindings.lua on
+# Omarchy 4, or ~/.config/hypr/bindings.conf on Omarchy 3).
 git clone https://github.com/28allday/omarchy-kernel-manager.git
 cd omarchy-kernel-manager
 ./OKM.sh
@@ -117,13 +118,14 @@ booted into.
 | Path | What it does |
 |---|---|
 | `/usr/local/bin/okm` | The installed script |
-| `~/.config/hypr/bindings.conf` | Adds a single `bindd` line in a marked block — the floating-window rule comes from Omarchy's stock `TUI.float` regex, no custom windowrules written |
+| `~/.config/hypr/bindings.lua` (Omarchy 4) or `bindings.conf` (Omarchy 3) | Adds a single `o.bind` (or `bindd`) line in a marked block — the floating-window rule comes from Omarchy's stock `TUI.float` regex, no custom windowrules written |
 | `~/.local/share/okm/kernel-state` | Records your stock kernel so it can never be accidentally removed |
 | `/etc/pacman.conf` | First time you install a CachyOS kernel, adds the `[cachyos]` section + Include line |
 
 To uninstall: `sudo rm /usr/local/bin/okm` and remove the
-`# OKM bindings - added by OKM installer` block from
-`~/.config/hypr/bindings.conf`.
+`OKM bindings - added by OKM installer` block from
+`~/.config/hypr/bindings.lua` (Omarchy 4) or `~/.config/hypr/bindings.conf`
+(Omarchy 3).
 
 ## Repository
 

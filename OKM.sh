@@ -160,7 +160,10 @@ check_aur_helper() {
 # =============================================================================
 
 detect_system_theme() {
-  local omarchy_theme_dir="$HOME/.config/omarchy/current/theme"
+  # Omarchy 4 moved the current theme to ~/.local/state; Omarchy 3 keeps it
+  # under ~/.config. Same ghostty.conf format in both.
+  local omarchy_theme_dir="$HOME/.local/state/omarchy/current/theme"
+  [[ -d "$omarchy_theme_dir" ]] || omarchy_theme_dir="$HOME/.config/omarchy/current/theme"
   local ghostty_conf="$omarchy_theme_dir/ghostty.conf"
 
   # Default colors (fallback)
