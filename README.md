@@ -129,10 +129,7 @@ To uninstall: `sudo rm /usr/local/bin/okm` and remove the
 
 ## Repository
 
-Mirrored on:
-
-- **GitHub:** https://github.com/28allday/omarchy-kernel-manager
-- **Forgejo:** https://git.no-signal.uk/nosignal/omarchy-kernel-manager
+https://github.com/28allday/omarchy-kernel-manager
 
 ## License
 
